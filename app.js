@@ -281,6 +281,8 @@ const initialDrafts = [
 
 const state = {
   loggedIn: false,
+  authChecking: true,
+  loginError: "",
   route: "dashboard",
   hotFilter: "全部",
   viralLink: "https://www.xiaohongshu.com/explore/mock-puzhigu-family-lawn",
@@ -351,7 +353,78 @@ function setToast(message) {
 }
 
 function render() {
+  if (state.authChecking) {
+    app.innerHTML = `
+      <main class="login-screen">
+        <section class="login-visual">
+          <div class="login-copy">
+            <span class="badge dark">景区 AI 内容生产工作台</span>
+            <h1>正在进入璞之谷内容工作台</h1>
+            <p>正在确认内部账号会话。</p>
+          </div>
+        </section>
+      </main>
+    `;
+    return;
+  }
   app.innerHTML = state.loggedIn ? renderShell() : renderLogin();
+}
+
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {})
+    },
+    ...options
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.message || "请求失败");
+  }
+  return data;
+}
+
+async function checkSession() {
+  try {
+    const data = await requestJson("/api/auth/me");
+    state.loggedIn = Boolean(data.authenticated);
+  } catch {
+    state.loggedIn = false;
+  } finally {
+    state.authChecking = false;
+    render();
+  }
+}
+
+async function login() {
+  const account = document.querySelector("#account")?.value.trim();
+  const password = document.querySelector("#password")?.value || "";
+
+  state.loginError = "";
+  render();
+
+  try {
+    await requestJson("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ account, password })
+    });
+    state.loggedIn = true;
+    state.loginError = "";
+    render();
+  } catch (error) {
+    state.loggedIn = false;
+    state.loginError = error.message || "登录失败";
+    render();
+  }
+}
+
+async function logout() {
+  await requestJson("/api/auth/logout", { method: "POST" }).catch(() => {});
+  state.loggedIn = false;
+  render();
 }
 
 function renderLogin() {
@@ -381,6 +454,7 @@ function renderLogin() {
             <label for="password">密码</label>
             <input class="input" id="password" type="password" value="prototype" />
           </div>
+          ${state.loginError ? `<p style="margin: 0 0 12px; color: #9f2a1d; font-size: 13px;">${escapeHtml(state.loginError)}</p>` : ""}
           <button class="btn primary" data-action="login" style="width: 100%">进入工作台</button>
           <p style="margin: 16px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6;">当前为前端 Prototype：链接解析、爆款拆解和原创生成均为本地模拟。</p>
         </div>
@@ -618,7 +692,10 @@ function renderHotspotListItem(item) {
           <span class="badge ${item.fit === "高" ? "gold" : ""}">${item.fit}适配</span>
         </div>
       </div>
-      <span class="badge">${item.tags[0]}</span>
+      <div class="row-actions">
+        <span class="badge">${item.tags[0]}</span>
+        <button class="btn small" data-action="delete-hotspot" data-hot="${item.id}">删除</button>
+      </div>
     </div>
   `;
 }
@@ -638,6 +715,7 @@ function renderHotspotDetail(item) {
     </div>
     <div class="row-actions" style="margin-top: 16px;">
       <button class="btn primary" data-action="make-topic" data-hot="${item.id}">生成原创方案</button>
+      <button class="btn" data-action="delete-hotspot" data-hot="${item.id}">删除样本</button>
       <button class="btn secondary" data-route="generator">进入生成</button>
     </div>
   `;
@@ -1045,7 +1123,10 @@ function renderDraftListItem(draft) {
           <span class="badge">${escapeHtml(draft.status)}</span>
         </div>
       </div>
-      <button class="btn small" data-action="copy-selected-draft" data-draft="${draft.id}">复制</button>
+      <div class="row-actions">
+        <button class="btn small" data-action="copy-selected-draft" data-draft="${draft.id}">复制</button>
+        <button class="btn small" data-action="delete-draft" data-draft="${draft.id}">删除</button>
+      </div>
     </div>
   `;
 }
@@ -1060,6 +1141,7 @@ function renderDraftEditor(draft) {
       <div class="row-actions">
         <button class="btn secondary" data-action="mark-published" data-draft="${draft.id}">标记已发布</button>
         <button class="btn" data-action="copy-selected-draft" data-draft="${draft.id}">复制全文</button>
+        <button class="btn" data-action="delete-draft" data-draft="${draft.id}">删除成稿</button>
       </div>
     </div>
     <div class="field">
@@ -1284,6 +1366,44 @@ function saveGeneratedDraft() {
   setToast("已保存为成稿");
 }
 
+function deleteHotspot(id) {
+  const exists = getHotspot(id);
+  if (!exists) return;
+  if (state.hotspots.length <= 1) {
+    setToast("至少保留一条爆款样本");
+    return;
+  }
+
+  state.hotspots = state.hotspots.filter((item) => item.id !== id);
+  state.topics = state.topics.filter((topic) => topic.hotId !== id);
+
+  if (state.selectedHotspotId === id) {
+    state.selectedHotspotId = state.hotspots[0]?.id || "";
+  }
+  if (!getTopic(state.selectedTopicId)) {
+    state.selectedTopicId = state.topics[0]?.id || "";
+  }
+  if (!getTopic(state.generator.topicId)) {
+    state.generator.topicId = state.topics[0]?.id || "";
+  }
+
+  render();
+  setToast("爆款样本已删除");
+}
+
+function deleteDraft(id) {
+  const exists = getDraft(id);
+  if (!exists) return;
+
+  state.drafts = state.drafts.filter((draft) => draft.id !== id);
+  if (state.selectedDraftId === id) {
+    state.selectedDraftId = state.drafts[0]?.id || "";
+  }
+
+  render();
+  setToast("成稿已删除");
+}
+
 function copyText(text) {
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(text).catch(() => {});
@@ -1327,12 +1447,12 @@ document.addEventListener("click", (event) => {
   const action = actionEl.dataset.action;
 
   if (action === "login") {
-    state.loggedIn = true;
-    render();
+    login();
+    return;
   }
   if (action === "logout") {
-    state.loggedIn = false;
-    render();
+    logout();
+    return;
   }
   if (action === "analyze-link") {
     analyzeViralLink();
@@ -1393,6 +1513,10 @@ document.addEventListener("click", (event) => {
   }
   if (action === "make-topic") {
     makeTopicFromHotspot(actionEl.dataset.hot || state.selectedHotspotId);
+  }
+  if (action === "delete-hotspot") {
+    deleteHotspot(actionEl.dataset.hot);
+    return;
   }
   if (action === "toggle-material") {
     const id = actionEl.dataset.material;
@@ -1488,6 +1612,10 @@ document.addEventListener("click", (event) => {
     const draft = getDraft(actionEl.dataset.draft);
     if (draft) copyText(`${draft.title}\n\n${draft.body}\n\n${draft.hashtags.map((item) => `#${item}`).join(" ")}`);
   }
+  if (action === "delete-draft") {
+    deleteDraft(actionEl.dataset.draft);
+    return;
+  }
   if (action === "mark-published") {
     const draft = getDraft(actionEl.dataset.draft);
     if (draft) {
@@ -1541,4 +1669,4 @@ document.addEventListener("input", (event) => {
   }
 });
 
-render();
+checkSession();

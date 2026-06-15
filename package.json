@@ -9,6 +9,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "DATABASE_URL=\"file:./dev.db\" prisma migrate dev",
     "db:deploy": "DATABASE_URL=\"file:./dev.db\" prisma migrate deploy",
+    "db:seed": "DATABASE_URL=\"file:./dev.db\" prisma db seed",
     "db:studio": "DATABASE_URL=\"file:./dev.db\" prisma studio"
   },
   "dependencies": {
@@ -17,5 +18,8 @@
   },
   "devDependencies": {
     "prisma": "5.22.0"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   }
 }
