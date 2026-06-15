@@ -2,7 +2,7 @@ const path = require("path");
 const express = require("express");
 
 const app = express();
-const port = Number(process.env.PORT || 5173);
+const port = Number(process.env.PORT || 3000);
 const projectRoot = path.resolve(__dirname, "..");
 
 app.disable("x-powered-by");

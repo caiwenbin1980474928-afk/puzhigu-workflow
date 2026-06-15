@@ -57,13 +57,32 @@ V1 不做：
 
 ## 如何运行当前原型
 
-方式一：直接打开文件。
+方式一：使用 Express 开发服务。
+
+```bash
+npm install
+npm start
+```
+
+然后访问：
+
+```text
+http://127.0.0.1:3000/index.html
+```
+
+健康检查：
+
+```text
+http://127.0.0.1:3000/api/health
+```
+
+方式二：直接打开文件。
 
 ```text
 index.html
 ```
 
-方式二：使用本地静态服务。
+方式三：使用 Python 本地静态服务。
 
 ```bash
 python3 -m http.server 5173
