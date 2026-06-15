@@ -2,7 +2,7 @@
 
 面向璞之谷景区运营团队的 AI 内容生产工作台。V1 目标是帮助运营人员从“小红书 / 抖音爆款链接”出发，完成爆款结构拆解、景区素材匹配、原创文案生成、配图方案生成和成稿保存。
 
-当前项目已完成可交互前端 Prototype，用于体验和评估产品流程。现阶段不接真实数据库、不接真实平台解析服务、不接真实 AI API。
+当前项目已完成可交互前端 Prototype，用于体验和评估产品流程。V1 正式开发策略是：保留现有 Prototype 主流程，不重做 UI，逐步将前端 mock 替换为 SQLite + Prisma + 独立 AI service 的真实能力。
 
 ## 核心流程
 
@@ -102,14 +102,15 @@ http://127.0.0.1:5173/index.html
 
 ## 推荐 V1 技术方案
 
-正式开发建议在不大范围重构 Prototype UI 的前提下，逐步替换 mock：
+正式开发在不大范围重构 Prototype UI 的前提下，逐步替换 mock：
 
-- 前端：保留当前单页结构，优先替换数据来源和交互调用。
+- 前端：保留当前单页 Prototype 结构，优先替换数据来源和交互调用。
 - 后端：Node.js + Express。
 - 数据库：SQLite。
 - ORM：Prisma。
 - AI 调用：封装为独立 `aiService`。
-- 本地开发：不依赖 PostgreSQL / Docker。
+- 本地开发：不依赖 PostgreSQL / Docker / Redis。
+- 任务状态：V1 先使用数据库状态字段和前端轮询，不引入消息队列。
 
 建议后续目录：
 
@@ -144,6 +145,23 @@ http://127.0.0.1:5173/index.html
 8. 将保存成稿替换为真实 Draft 数据。
 9. 增加生成历史、版本记录和 AI 调用日志。
 
+## 正式开发任务树
+
+| 顺序 | 任务 | 验收标准 | 建议 commit |
+| --- | --- | --- | --- |
+| 1 | 对齐 V1 文档策略 | README、PRD、TECH 均明确 SQLite + Prisma + 独立 AI service | `docs: align v1 development strategy` |
+| 2 | 初始化 Express 服务 | 可启动后端并托管当前静态页面 | `chore: add express server scaffold` |
+| 3 | 接入 Prisma + SQLite | 可执行 migration 并生成本地数据库 | `chore: add prisma sqlite setup` |
+| 4 | 导入 mock seed | 当前 mock 数据可进入数据库 | `db: seed prototype mock data` |
+| 5 | 替换登录 mock | 内部账号可登录，刷新后保持会话 | `feat(auth): add internal login session` |
+| 6 | 替换素材 mock | 素材列表、新增、筛选来自 API | `feat(materials): persist scenic materials` |
+| 7 | 替换爆款链接 mock | 粘贴链接后保存为爆款素材并生成解析状态 | `feat(viral): save viral references` |
+| 8 | 接入 AI service mock provider | 拆解与生成能力通过 service 调用 | `feat(ai): add ai service abstraction` |
+| 9 | 替换爆款拆解 mock | AI 输出结构、情绪、标题套路和视觉风格 | `feat(analysis): analyze viral structure` |
+| 10 | 替换原创生成 mock | AI 输出原创文案、配图方案和图片 prompt | `feat(generation): generate original content plan` |
+| 11 | 替换成稿 mock | 成稿和生成历史刷新后不丢失 | `feat(drafts): persist drafts and generation history` |
+| 12 | 完成主流程验收 | 登录到保存成稿的 V1 闭环跑通 | `test: verify v1 core workflow` |
+
 ## 文档索引
 
 - [PRD-璞之谷内容运营助手-V1.md](./PRD-璞之谷内容运营助手-V1.md)：产品需求文档。
@@ -159,4 +177,3 @@ http://127.0.0.1:5173/index.html
 - 所有 AI 输出必须保留引用素材、参考爆款和原创性说明。
 - 对价格、开放时间、活动权益等事实信息，必须以素材库为准，不能由 AI 编造。
 - 发布前必须由运营人员人工确认。
-

@@ -1,0 +1,13 @@
+{
+  "name": "puzhigu-ai-content-workbench",
+  "version": "0.1.0",
+  "private": true,
+  "description": "V1 backend scaffold for the Puzhigu AI content workbench prototype.",
+  "scripts": {
+    "dev": "node --watch server/index.js",
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}
