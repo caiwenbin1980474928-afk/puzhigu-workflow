@@ -684,17 +684,17 @@ function renderHotspotListItem(item) {
   return `
     <div class="list-item clickable ${state.selectedHotspotId === item.id ? "selected" : ""}" data-hot="${item.id}">
       <div>
-        <div class="item-title">${escapeHtml(item.title)}</div>
+        <div class="item-title" style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+          <span>${escapeHtml(item.title)}</span>
+          <button class="btn small" data-action="delete-hotspot" data-hot="${item.id}">删除</button>
+        </div>
         <div class="item-meta">
           <span>${escapeHtml(item.platform)}</span>
           <span>${escapeHtml(item.time)}</span>
           <span>${escapeHtml(item.metrics)}</span>
           <span class="badge ${item.fit === "高" ? "gold" : ""}">${item.fit}适配</span>
+          <span class="badge">${item.tags[0]}</span>
         </div>
-      </div>
-      <div class="row-actions">
-        <span class="badge">${item.tags[0]}</span>
-        <button class="btn small" data-action="delete-hotspot" data-hot="${item.id}">删除</button>
       </div>
     </div>
   `;
@@ -785,6 +785,7 @@ function renderMaterialCard(item) {
           <button class="btn small ${selected ? "secondary" : ""}" data-action="toggle-material" data-material="${item.id}">
             ${selected ? "已加入生成" : "加入生成"}
           </button>
+          <button class="btn small" data-action="delete-material" data-material="${item.id}">删除</button>
         </div>
       </div>
     </article>
@@ -1404,6 +1405,25 @@ function deleteDraft(id) {
   setToast("成稿已删除");
 }
 
+function deleteMaterial(id) {
+  const exists = getMaterial(id);
+  if (!exists) return;
+  if (state.materials.length <= 1) {
+    setToast("至少保留一条景区素材");
+    return;
+  }
+
+  state.materials = state.materials.filter((material) => material.id !== id);
+  state.generator.materialIds = state.generator.materialIds.filter((materialId) => materialId !== id);
+  state.topics = state.topics.map((topic) => ({
+    ...topic,
+    materialIds: topic.materialIds.filter((materialId) => materialId !== id)
+  }));
+
+  render();
+  setToast("景区素材已删除");
+}
+
 function copyText(text) {
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(text).catch(() => {});
@@ -1525,6 +1545,10 @@ document.addEventListener("click", (event) => {
       ? state.generator.materialIds.filter((item) => item !== id)
       : [...state.generator.materialIds, id];
     render();
+  }
+  if (action === "delete-material") {
+    deleteMaterial(actionEl.dataset.material);
+    return;
   }
   if (action === "add-material") {
     const title = document.querySelector("#new-mat-title")?.value || "新素材";
