@@ -1,0 +1,204 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  account      String   @unique
+  passwordHash String
+  displayName  String?
+  role         String   @default("operator")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ViralReference {
+  id               String   @id @default(cuid())
+  platform         String
+  sourceUrl        String   @unique
+  sourceType       String   @default("url")
+  contentType      String?
+  parseStatus      String   @default("pending")
+  analysisStatus   String   @default("pending")
+  title            String?
+  authorName       String?
+  metricsJson      String   @default("{}")
+  rawText          String?
+  summary          String?
+  coverImageUrl    String?
+  mediaDescription String?
+  tagsJson         String   @default("[]")
+  fitLevel         String?
+  manualInputJson  String   @default("{}")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  analysis    ViralAnalysis?
+  directions  ContentDirection[]
+  generations GenerationRun[]
+  drafts      Draft[]
+
+  @@index([platform, parseStatus])
+}
+
+model ViralAnalysis {
+  id                  String   @id @default(cuid())
+  viralReferenceId    String   @unique
+  hook                String?
+  titleFormula        String?
+  structure           String?
+  emotion             String?
+  targetAudience      String?
+  interactionTriggers String?
+  visualStyle         String?
+  scenicFit           String?
+  originalityBoundary String?
+  riskNotes           String?
+  analysisJson        String   @default("{}")
+  provider            String?
+  model               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  viralReference ViralReference @relation(fields: [viralReferenceId], references: [id], onDelete: Cascade)
+}
+
+model ScenicMaterial {
+  id            String    @id @default(cuid())
+  type          String
+  title         String
+  content       String
+  tagsJson      String    @default("[]")
+  imageUrl      String?
+  validFrom     DateTime?
+  validTo       DateTime?
+  isRecommended Boolean   @default(false)
+  status        String    @default("active")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([type, status])
+}
+
+model ContentDirection {
+  id                String   @id @default(cuid())
+  title             String
+  sourceType        String
+  targetPlatform    String
+  targetAudience    String?
+  contentGoal       String?
+  materialIdsJson   String   @default("[]")
+  originalDirection String?
+  status            String   @default("pending")
+  viralReferenceId  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  viralReference ViralReference? @relation(fields: [viralReferenceId], references: [id])
+  generations    GenerationRun[]
+  drafts         Draft[]
+
+  @@index([targetPlatform, status])
+}
+
+model GenerationRun {
+  id                 String   @id @default(cuid())
+  taskType           String   @default("content_generate")
+  status             String   @default("pending")
+  provider           String?
+  model              String?
+  inputJson          String
+  outputJson         String?
+  errorMessage       String?
+  viralReferenceId   String?
+  contentDirectionId String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  viralReference   ViralReference?   @relation(fields: [viralReferenceId], references: [id])
+  contentDirection ContentDirection? @relation(fields: [contentDirectionId], references: [id])
+  drafts           Draft[]
+
+  @@index([status, taskType])
+}
+
+model Draft {
+  id                   String   @id @default(cuid())
+  contentDirectionId   String?
+  generationRunId      String?
+  viralReferenceId     String?
+  platform             String
+  title                String
+  body                 String
+  hashtagsJson         String   @default("[]")
+  imageSuggestionsJson String   @default("[]")
+  imagePromptsJson     String   @default("[]")
+  videoScriptJson      String   @default("[]")
+  riskNotes            String?
+  originalityNotes     String?
+  status               String   @default("draft")
+  publishUrl           String?
+  version              Int      @default(1)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  contentDirection ContentDirection? @relation(fields: [contentDirectionId], references: [id])
+  generationRun    GenerationRun?    @relation(fields: [generationRunId], references: [id])
+  viralReference   ViralReference?   @relation(fields: [viralReferenceId], references: [id])
+  versions         DraftVersion[]
+
+  @@index([platform, status])
+}
+
+model DraftVersion {
+  id         String   @id @default(cuid())
+  draftId    String
+  version    Int
+  title      String
+  body       String
+  outputJson String?
+  createdAt  DateTime @default(now())
+
+  draft Draft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@unique([draftId, version])
+}
+
+model PromptTemplate {
+  id        String   @id @default(cuid())
+  scene     String
+  name      String
+  platform  String?
+  content   String
+  version   String
+  isDefault Boolean  @default(false)
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([scene, enabled])
+}
+
+model AiCallLog {
+  id           String   @id @default(cuid())
+  scene        String
+  provider     String
+  model        String?
+  status       String
+  requestJson  String?
+  responseJson String?
+  errorMessage String?
+  latencyMs    Int?
+  relatedType  String?
+  relatedId    String?
+  createdAt    DateTime @default(now())
+
+  @@index([scene, status])
+  @@index([relatedType, relatedId])
+}

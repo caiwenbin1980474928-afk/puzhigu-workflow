@@ -5,9 +5,17 @@
   "description": "V1 backend scaffold for the Puzhigu AI content workbench prototype.",
   "scripts": {
     "dev": "node --watch server/index.js",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "DATABASE_URL=\"file:./dev.db\" prisma migrate dev",
+    "db:deploy": "DATABASE_URL=\"file:./dev.db\" prisma migrate deploy",
+    "db:studio": "DATABASE_URL=\"file:./dev.db\" prisma studio"
   },
   "dependencies": {
+    "@prisma/client": "5.22.0",
     "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "prisma": "5.22.0"
   }
 }
