@@ -95,6 +95,36 @@ function publicUser(user) {
   };
 }
 
+function parseJsonArray(value) {
+  try {
+    const parsed = JSON.parse(value || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function normalizeTags(value) {
+  const tags = Array.isArray(value)
+    ? value
+    : String(value || "")
+        .split(/[，,\s]+/)
+        .filter(Boolean);
+  return tags.length ? tags : ["运营新增"];
+}
+
+function publicMaterial(material) {
+  return {
+    id: material.id,
+    type: material.type,
+    title: material.title,
+    content: material.content,
+    tags: parseJsonArray(material.tagsJson),
+    image: material.imageUrl || "./assets/forest-path.png",
+    recommended: material.isRecommended
+  };
+}
+
 async function getSessionUser(req) {
   const cookies = parseCookies(req.headers.cookie);
   const session = readSessionToken(cookies[sessionCookieName]);
@@ -158,6 +188,89 @@ app.post("/api/auth/logout", (req, res) => {
   clearSessionCookie(res);
   res.json({
     ok: true
+  });
+});
+
+app.get("/api/materials", async (req, res) => {
+  const type = String(req.query.type || "");
+  const where = {
+    status: "active",
+    ...(type && type !== "全部" ? { type } : {})
+  };
+
+  const materials = await prisma.scenicMaterial.findMany({
+    where,
+    orderBy: [{ isRecommended: "desc" }, { updatedAt: "desc" }]
+  });
+
+  res.json({
+    materials: materials.map(publicMaterial)
+  });
+});
+
+app.post("/api/materials", async (req, res) => {
+  const { title, type, content, tags, imageUrl } = req.body || {};
+  if (!title || !type || !content) {
+    return res.status(400).json({
+      error: "missing_material_fields",
+      message: "素材名称、类型和素材描述不能为空"
+    });
+  }
+
+  const material = await prisma.scenicMaterial.create({
+    data: {
+      title: String(title).trim(),
+      type: String(type).trim(),
+      content: String(content).trim(),
+      tagsJson: JSON.stringify(normalizeTags(tags)),
+      imageUrl: imageUrl || "./assets/forest-path.png",
+      isRecommended: false,
+      status: "active"
+    }
+  });
+
+  res.status(201).json({
+    material: publicMaterial(material)
+  });
+});
+
+app.delete("/api/materials/:id", async (req, res) => {
+  const { id } = req.params;
+  const material = await prisma.scenicMaterial.findFirst({
+    where: {
+      id,
+      status: "active"
+    }
+  });
+
+  if (!material) {
+    return res.status(404).json({
+      error: "material_not_found",
+      message: "素材不存在或已删除"
+    });
+  }
+
+  const activeCount = await prisma.scenicMaterial.count({
+    where: {
+      status: "active"
+    }
+  });
+
+  if (activeCount <= 1) {
+    return res.status(400).json({
+      error: "last_material",
+      message: "至少保留一条景区素材"
+    });
+  }
+
+  await prisma.scenicMaterial.update({
+    where: { id },
+    data: { status: "deleted" }
+  });
+
+  res.json({
+    ok: true,
+    id
   });
 });
 

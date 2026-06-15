@@ -295,6 +295,8 @@ const state = {
   materialPanel: false,
   topicPanel: false,
   outputTab: "titles",
+  materialsLoading: false,
+  materialError: "",
   generator: {
     topicId: "topic-1",
     platform: "小红书",
@@ -307,7 +309,8 @@ const state = {
   generating: false,
   generatedDraft: null,
   topics: [...initialTopics],
-  materials: [...mockMaterials],
+  materials: [],
+  materialResults: [],
   hotspots: [...mockHotspots],
   drafts: [...initialDrafts],
   toast: ""
@@ -387,10 +390,42 @@ async function requestJson(url, options = {}) {
   return data;
 }
 
+function mergeMaterials(materials) {
+  const map = new Map(state.materials.map((item) => [item.id, item]));
+  materials.forEach((item) => map.set(item.id, item));
+  state.materials = Array.from(map.values());
+}
+
+async function loadMaterials({ filter = state.materialFilter, silent = false } = {}) {
+  state.materialsLoading = !silent;
+  state.materialError = "";
+  if (!silent) render();
+
+  try {
+    const query = filter && filter !== "全部" ? `?type=${encodeURIComponent(filter)}` : "";
+    const data = await requestJson(`/api/materials${query}`);
+    const materials = data.materials || [];
+    if (filter === "全部") {
+      state.materials = materials;
+    } else {
+      mergeMaterials(materials);
+    }
+    state.materialResults = materials;
+  } catch (error) {
+    state.materialError = error.message || "素材加载失败";
+  } finally {
+    state.materialsLoading = false;
+    if (!silent) render();
+  }
+}
+
 async function checkSession() {
   try {
     const data = await requestJson("/api/auth/me");
     state.loggedIn = Boolean(data.authenticated);
+    if (state.loggedIn) {
+      await loadMaterials({ silent: true });
+    }
   } catch {
     state.loggedIn = false;
   } finally {
@@ -413,6 +448,7 @@ async function login() {
     });
     state.loggedIn = true;
     state.loginError = "";
+    await loadMaterials({ silent: true });
     render();
   } catch (error) {
     state.loggedIn = false;
@@ -749,7 +785,7 @@ function renderHotspotForm() {
 }
 
 function renderMaterials() {
-  const filtered = state.materials.filter((item) => state.materialFilter === "全部" || item.type === state.materialFilter);
+  const filtered = state.materialResults;
   return `
     <div class="section-head">
       <div class="filters">
@@ -762,9 +798,15 @@ function renderMaterials() {
       <button class="btn" data-action="toggle-material-panel">${state.materialPanel ? "收起新增" : "新增素材"}</button>
     </div>
     ${state.materialPanel ? renderMaterialForm() : ""}
-    <section class="grid cols-3">
-      ${filtered.map(renderMaterialCard).join("")}
-    </section>
+    ${
+      state.materialsLoading
+        ? renderEmpty("正在加载景区素材", "素材列表正在从本地 API 读取。")
+        : state.materialError
+          ? renderEmpty("素材加载失败", state.materialError)
+          : filtered.length
+            ? `<section class="grid cols-3">${filtered.map(renderMaterialCard).join("")}</section>`
+            : renderEmpty("暂无素材", "当前筛选条件下没有景区素材。")
+    }
   `;
 }
 
@@ -1405,7 +1447,26 @@ function deleteDraft(id) {
   setToast("成稿已删除");
 }
 
-function deleteMaterial(id) {
+async function saveMaterial() {
+  const title = document.querySelector("#new-mat-title")?.value.trim() || "";
+  const type = document.querySelector("#new-mat-type")?.value || "活动";
+  const content = document.querySelector("#new-mat-content")?.value.trim() || "";
+
+  try {
+    const data = await requestJson("/api/materials", {
+      method: "POST",
+      body: JSON.stringify({ title, type, content })
+    });
+    if (data.material) mergeMaterials([data.material]);
+    state.materialPanel = false;
+    await loadMaterials({ filter: state.materialFilter, silent: true });
+    setToast("素材已保存");
+  } catch (error) {
+    setToast(error.message || "素材保存失败");
+  }
+}
+
+async function deleteMaterial(id) {
   const exists = getMaterial(id);
   if (!exists) return;
   if (state.materials.length <= 1) {
@@ -1413,15 +1474,23 @@ function deleteMaterial(id) {
     return;
   }
 
-  state.materials = state.materials.filter((material) => material.id !== id);
-  state.generator.materialIds = state.generator.materialIds.filter((materialId) => materialId !== id);
-  state.topics = state.topics.map((topic) => ({
-    ...topic,
-    materialIds: topic.materialIds.filter((materialId) => materialId !== id)
-  }));
+  try {
+    await requestJson(`/api/materials/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    });
+    state.materials = state.materials.filter((material) => material.id !== id);
+    state.materialResults = state.materialResults.filter((material) => material.id !== id);
+    state.generator.materialIds = state.generator.materialIds.filter((materialId) => materialId !== id);
+    state.topics = state.topics.map((topic) => ({
+      ...topic,
+      materialIds: topic.materialIds.filter((materialId) => materialId !== id)
+    }));
 
-  render();
-  setToast("景区素材已删除");
+    render();
+    setToast("景区素材已删除");
+  } catch (error) {
+    setToast(error.message || "素材删除失败");
+  }
 }
 
 function copyText(text) {
@@ -1486,7 +1555,8 @@ document.addEventListener("click", (event) => {
   }
   if (action === "material-filter") {
     state.materialFilter = actionEl.dataset.value;
-    render();
+    loadMaterials({ filter: state.materialFilter });
+    return;
   }
   if (action === "toggle-hot-panel") {
     state.hotPanel = !state.hotPanel;
@@ -1551,21 +1621,8 @@ document.addEventListener("click", (event) => {
     return;
   }
   if (action === "add-material") {
-    const title = document.querySelector("#new-mat-title")?.value || "新素材";
-    const type = document.querySelector("#new-mat-type")?.value || "活动";
-    const content = document.querySelector("#new-mat-content")?.value || "";
-    const material = {
-      id: `mat-${Date.now()}`,
-      type,
-      title,
-      tags: ["运营新增"],
-      image: "./assets/forest-path.png",
-      content,
-      recommended: false
-    };
-    state.materials.unshift(material);
-    state.materialPanel = false;
-    setToast("素材已保存");
+    saveMaterial();
+    return;
   }
   if (action === "add-topic") {
     const topic = {
